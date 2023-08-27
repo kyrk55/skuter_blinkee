@@ -1,7 +1,9 @@
 #include <WiFi.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
+#include <Wire.h>
 #include "src/ESP2SOTA/src/ESP2SOTA.h"
+#include "src/DS3231/DS3231.h"
 #include "src/PCF8575/PCF8575.h"
 //#include "src/TFT_eSPI/TFT_eSPI.h"
 #include <WiFiAP.h>
@@ -10,6 +12,7 @@
 #include "Final_Frontier288.h"
 TwoWire I2Ctwo = TwoWire(1);
 PCF8575 pcf8575(&I2Ctwo,0x20,21,22);
+DS3231 RTC;
 
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite buf = TFT_eSprite(&tft);
@@ -30,7 +33,66 @@ WebServer server(80);
 
 
   String test;
+//////////////////////////////////////////////////////////
+//odczyt danych
+long long_time;
+long tt;
+bool kk;
+bool error;
+int counter;
+
+bool words[97] ;//= {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+bool words2[97] = {};
+char gears[4] = {'P','3','2','1'};
+void odczyt() {
+  kk = !digitalRead(23);
+  tt = micros() - long_time;
+  if(kk == 0 && tt > 30000){
+    if(error == 0){
+      for(int i = 0; i<97; i++){
+        words[i] = words2[i];
+      }
+    }
+    counter = 0;
+    error = 0;
+  }
+  if(kk == 1 && counter < 97){
+    if(tt < 600){
+      words2[counter] = 0;
+    }
+    else{
+      words2[counter] = 1;
+    }
+    counter++;
+  }
+  else if(kk == 1){
+    error = 1;
+  }
+  long_time = micros();
+}
+
+int ReadFromTable(int poczatek, int koniec){
+  int temp = 0;
+  int dlugosc = (poczatek - koniec);
+  if(dlugosc > 0){
+    for(int i = 0; i<=abs(dlugosc); i++){
+      temp = temp + (words[poczatek-i] << i);
+    }
+  }
+  else if(dlugosc < 0){
+    for(int i = 0; i<=abs(dlugosc); i++){
+      temp = temp + (words[koniec+i] << i);
+    }
+  }
+  else temp = words[koniec];
+  return temp;
+}
+//////////////////////////////////////////////////////////
+
+  
 void setup() {
+  attachInterrupt(digitalPinToInterrupt(23), odczyt, CHANGE);
+  
   WiFi.softAP(AP_SSID, AP_PASS);
   delay(100);
   WiFi.softAPConfig(PageIP, gateway, subnet);
@@ -58,6 +120,7 @@ void setup() {
 //  arrowS.setPivot(100, 3);
   pinMode(19,OUTPUT);
   digitalWrite(19,1);
+  //Wire.begin();
   pcf8575.begin();
   pcf8575.pinMode(P0, INPUT);
   pcf8575.pinMode(P1, INPUT);
@@ -66,6 +129,9 @@ void setup() {
   pcf8575.pinMode(P4, INPUT);
   pcf8575.pinMode(P5, INPUT);
   pcf8575.pinMode(P15, OUTPUT);
+//  pcf8575.setSecond(0);
+//  pcf8575.setMinute(17);
+//  pcf8575.setHour(17);
 }
 int x = 0;
 int delta=0;
@@ -75,6 +141,7 @@ float stopnie = 0;
 float stopnie1 = 0;
 float stopnie2 = 0;
 int pen;
+double odo=7054;
 void loop() {
   life = !life;
   //pcf8575.digitalWrite(P15, life);
@@ -89,26 +156,71 @@ void loop() {
 
   //drawG(stopnie,stopnie1,stopnie2,(millis()/1000)&0b11111111,millis()/1000,pen,"02:26");
   //sipleDraw("test1","test2","test3");
-  tft.setTextDatum(TC_DATUM);
-  tft.setTextSize(8);
-  tft.drawString("          "+String(delta)+"          ",400,0,1);
-  tft.drawString("          "+String(pen)+"          ",400,60,1);
-  tft.drawString("[0,1,1,0,1,0,1,0,1,1]",400,120,1);
-  tft.drawString("          NAN          ",400,180,1);
-  tft.drawString("          NAN          ",400,240,1);
-  tft.drawString("          NAN          ",400,300,1);
-  tft.drawString(String(life),400,360,1);
-  String helper = "[" + String(pcf8575.digitalRead(P0)) + "," + String(pcf8575.digitalRead(P1)) + "," + String(pcf8575.digitalRead(P2)) + ","+String(pcf8575.digitalRead(P3)) + ","+String(pcf8575.digitalRead(P4)) + ","+String(pcf8575.digitalRead(P5)) + "]";
-  tft.drawString(helper,400,420,1);
+  String helper;
+  tft.setTextDatum(TR_DATUM);
+  tft.setTextSize(2);
+  helper = "[";
+  for(int i = 0; i<33; i++){
+    helper += words[i];
+  }
+  helper += "]";
+  tft.drawString(helper,800,0,1);
+  
+  helper = "[";
+  for(int i = 33; i<65; i++){
+    helper += words[i];
+  }
+  helper += "]";
+  
+  tft.drawString(helper,800,26,1);
+  helper = "[";
+  for(int i = 65; i<97; i++){
+    helper += words[i];
+  }
+  helper += "]";
+  tft.drawString(helper,800,52,1);
+  helper = "[" + String(pcf8575.digitalRead(P0)) + "," + String(pcf8575.digitalRead(P1)) + "," + String(pcf8575.digitalRead(P2)) + ","+String(pcf8575.digitalRead(P3)) + ","+String(pcf8575.digitalRead(P4)) + ","+String(pcf8575.digitalRead(P5)) + "]";
+//  tft.drawString(String(life),800,360,1);
+  tft.drawString(helper,800,78,1);
+ 
+  tft.setTextSize(8);  
+  tft.drawString("          "+String(ReadFromTable(72,57)),620,220,6);
+  tft.drawString("km/h",800,220,1);
+  tft.drawString(String(gears[ReadFromTable(40,39)]),750,300,4);
+  tft.drawString("   "+String(ReadFromTable(56,48))+"A",800,100,2);
+  
+
+  tft.setTextDatum(TL_DATUM);
+  tft.drawString(getTime(),0,0,1);
+  tft.drawString(String(74.6,1)+"V    ",0,54,1); 
+  tft.drawString("ODO:"+String(odo,0)+"km ",0,100,2);
   delta = millis() - delta;
   pen = delta;
+  odo += (float(ReadFromTable(72,57))/3600.0)*(float(pen)/1000.0);
   delta = millis();
   server.handleClient();
 }
+
+String getTime(){
+  int h = pcf8575.getHour();
+  int m = pcf8575.getMinute();
+  int s = pcf8575.getSecond();
+  String out;
+  if(h < 10) out += "0";
+  out += String(h);
+  out += ":";
+  if(m < 10) out += "0";
+  out += String(m);
+  out += ":";
+  if(s < 10) out += "0";
+  out += String(s);
+  return out;
+}
+
 int pid(float curent, float to, float k = 10){
   if(curent == to) return(curent);
   else{
-    int dif = (to - curent)/k;
+    int dif = (to - curent)/k; 
     if(dif > 20) dif = 20;
     if(curent - to < 1 && !dif) dif = 1;
     if(curent - to > 1 && !dif) dif = -1;

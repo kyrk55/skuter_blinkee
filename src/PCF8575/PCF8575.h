@@ -113,7 +113,6 @@
 
 class PCF8575 {
 public:
-
 	PCF8575(uint8_t address);
 	PCF8575(uint8_t address, uint8_t interruptPin,  void (*interruptFunction)() );
 
@@ -133,8 +132,17 @@ public:
 #endif
 
 	void begin();
-	void pinMode(uint8_t pin, uint8_t mode);
-
+	void pinMode(uint8_t pin, uint8_t mode);	
+	uint8_t getSecond();
+	uint8_t getMinute();
+	uint8_t getHour();
+			void setSecond(byte Second);
+			// In addition to setting the seconds, this clears the
+			// "Oscillator Stop Flag".
+		void setMinute(byte Minute);
+			// Sets the minute
+		void setHour(byte Hour);
+	
 	void readBuffer(bool force = true);
 	uint8_t digitalRead(uint8_t pin);
 	#ifndef PCF8575_LOW_MEMORY
@@ -184,6 +192,8 @@ public:
 	void digitalWrite(uint8_t pin, uint8_t value);
 
 private:
+	byte bcdToDec(byte val);
+	byte decToBcd(byte val);
 	uint8_t _address;
 
 	#if !defined(DEFAULT_SDA)
@@ -224,7 +234,10 @@ private:
 	unsigned long lastReadMillis = 0;
 
 	uint16_t writeByteBuffered = 0;
+	protected:
 
+		byte readControlByte(bool which);
+		void writeControlByte(byte control, bool which);
 };
 
 #endif

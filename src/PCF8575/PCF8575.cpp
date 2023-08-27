@@ -382,6 +382,122 @@ void PCF8575::readBuffer(bool force){
  * @param pin
  * @return
  */
+ 
+byte PCF8575::bcdToDec(byte val) {
+// Convert binary coded decimal to normal decimal numbers
+	return ( (val/16*10) + (val%16) );
+}
+
+ byte PCF8575::decToBcd(byte val) {
+// Convert normal decimal numbers to binary coded decimal
+	return ( (val/10*16) + (val%10) );
+}
+
+uint8_t PCF8575::getSecond(){
+	_wire->beginTransmission(0x68);
+	_wire->write(0x00);
+	_wire->endTransmission();
+
+	_wire->requestFrom(0x68, 1);
+	return bcdToDec(_wire->read());
+};
+
+uint8_t PCF8575::getMinute() {
+	_wire->beginTransmission(0x68);
+	_wire->write(0x01);
+	_wire->endTransmission();
+
+	_wire->requestFrom(0x68, 1);
+	return bcdToDec(_wire->read());
+};
+
+uint8_t PCF8575::getHour() {
+	byte temp_buffer;
+	byte hour;
+	_wire->beginTransmission(0x68);
+	_wire->write(0x02);
+	_wire->endTransmission();
+
+	_wire->requestFrom(0x68, 1);
+	temp_buffer = _wire->read();
+	hour = bcdToDec(temp_buffer & 0b00111111);
+	return hour;
+};
+
+byte PCF8575::readControlByte(bool which) {
+	// Read selected control byte
+	// first byte (0) is 0x0e, second (1) is 0x0f
+	_wire->beginTransmission(0x68);
+	if (which) {
+		// second control byte
+		_wire->write(0x0f);
+	} else {
+		// first control byte
+		_wire->write(0x0e);
+	}
+	_wire->endTransmission();
+	_wire->requestFrom(0x68, 1);
+	return _wire->read();
+}
+void PCF8575::writeControlByte(byte control, bool which) {
+	// Write the selected control byte.
+	// which=false -> 0x0e, true->0x0f.
+	_wire->beginTransmission(0x68);
+	if (which) {
+		_wire->write(0x0f);
+	} else {
+		_wire->write(0x0e);
+	}
+	_wire->write(control);
+	_wire->endTransmission();
+}
+
+void PCF8575::setSecond(byte Second) {
+	// Sets the seconds
+	// This function also resets the Oscillator Stop Flag, which is set
+	// whenever power is interrupted.
+	_wire->beginTransmission(0x68);
+	_wire->write(0x00);
+	_wire->write(decToBcd(Second));
+	_wire->endTransmission();
+	// Clear OSF flag
+	byte temp_buffer = readControlByte(1);
+	writeControlByte((temp_buffer & 0b01111111), 1);
+};
+
+void PCF8575::setMinute(byte Minute) {
+	// Sets the minutes
+	_wire->beginTransmission(0x68);
+	_wire->write(0x01);
+	_wire->write(decToBcd(Minute));
+	_wire->endTransmission();
+};
+
+// Following setHour revision by David Merrifield 4/14/2020 correcting handling of 12-hour clock
+
+void PCF8575::setHour(byte Hour) {
+	// Sets the hour, without changing 12/24h mode.
+	// The hour must be in 24h format.
+
+	bool h12;
+	byte temp_hour;
+
+	// Start by figuring out what the 12/24 mode is
+	_wire->beginTransmission(0x68);
+	_wire->write(0x02);
+	_wire->endTransmission();
+	_wire->requestFrom(0x68, 1);
+	h12 = (_wire->read() & 0b01000000);
+	// if h12 is true, it's 12h mode; false is 24h.
+
+	temp_hour = decToBcd(Hour) & 0b10111111;
+
+	_wire->beginTransmission(0x68);
+	_wire->write(0x02);
+	_wire->write(temp_hour);
+	_wire->endTransmission();
+};
+
 uint8_t PCF8575::digitalRead(uint8_t pin){
 	uint8_t value = LOW;
 	if ((bit(pin) & writeMode)>0){
